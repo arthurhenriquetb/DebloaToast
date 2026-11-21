@@ -37,6 +37,10 @@ A **single explicit warning** appears before executing the uninstall operation, 
 
 Connect to ADB, then open **Apps**. System packages removed for Android user 0 remain in the list, appear dimmed and marked **REMOVED**, and are available under the **Removed** category. Select only the packages you want and tap **Reinstall**. No packages are selected by default. The previous recovery dialog has been removed. Automatic ADB discovery prompts and the automatic connection button have been removed; pairing is initiated manually.
 
+## Export lists (v0.12 updated)
+
+In **Apps** and **Suggestions**, tap the small document icon to export the **currently filtered and sorted** list. Choose between copying package IDs, copying full details, saving IDs to TXT, or saving full details to TXT. Detailed export includes package ID, name, status (including REMOVED), category, estimated risk, description, size, and RAM when available. Risk labels are estimates and are not guarantees of safe removal. Samsung `com.samsung.android.app.clockpack` (Lock Screen Clock Styles) is classified as **Red** because uninstalling it can break the lock-screen clock style selector.
+
 ## Main features
 
 - View installed and preinstalled packages from the actual phone, not a device-specific preset.
