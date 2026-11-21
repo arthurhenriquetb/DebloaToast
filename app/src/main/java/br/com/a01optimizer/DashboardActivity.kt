@@ -417,7 +417,7 @@ class DashboardActivity : Activity() {
             visibility = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) View.VISIBLE else View.GONE
         })
         content.addView(label(tr("Recovery", "Restauração"), 17f, true))
-        content.addView(button(tr("Restore removed system apps", "Restaurar apps de fábrica")) {
+        content.addView(button(tr("Scan and reinstall removed system apps", "Buscar e reinstalar apps de fábrica")) {
             confirmRestore()
         })
     }
@@ -438,7 +438,7 @@ class DashboardActivity : Activity() {
         })
         content.addView(label(tr("Required to sort by full app size.",
             "Necessário para ordenar pelo tamanho completo."), 12f))
-        content.addView(label("DebloaToast Expert v0.11", 15f, true))
+        content.addView(label("DebloaToast Expert v0.12", 15f, true))
         content.addView(button(tr("Help and PDF guide", "Ajuda e tutorial em PDF")) {
             startActivity(Intent(this, HelpActivity::class.java))
         })
@@ -797,15 +797,50 @@ class DashboardActivity : Activity() {
     }
 
     private fun confirmRestore() {
-        val targets = removed().filter(::isValidId)
-        if (targets.isEmpty()) {
-            toast(tr("Nothing to restore", "Nada para restaurar"))
+        if (!connected) {
+            AlertDialog.Builder(this)
+                .setTitle(tr("ADB connection required", "Conexão ADB necessária"))
+                .setMessage(tr("Connect to ADB first. Recovery scans Android itself, even if the app's removal history is empty.",
+                    "Conecte ao ADB primeiro. A recuperação consulta o próprio Android, mesmo sem histórico de remoção."))
+                .setPositiveButton(tr("Connect", "Conectar")) { _, _ -> openConnectTab() }
+                .setNegativeButton(tr("Cancel", "Cancelar"), null).show()
             return
         }
-        AlertDialog.Builder(this).setTitle(tr("Restore ${targets.size} system apps?",
-            "Restaurar ${targets.size} apps de fábrica?"))
+        task(tr("Scanning removed system packages…", "Buscando pacotes de fábrica removidos…")) { p ->
+            // -u includes system packages not installed for user 0.
+            // Compare with currently installed packages; never rely solely on app preferences.
+            val available = parsePackages(AdbCore.command(this, p, "pm list packages -u -s --user 0"))
+            val installed = parsePackages(AdbCore.command(this, p, "pm list packages -s --user 0"))
+            val candidates = (available - installed).filter(::isValidId).sorted()
+            runOnUiThread { showRecoveryChoices(candidates) }
+        }
+    }
+
+    private fun showRecoveryChoices(candidates: List<String>) {
+        if (isFinishing || isDestroyed) return
+        if (candidates.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle(tr("No removed system packages found", "Nenhum pacote de fábrica removido encontrado"))
+                .setMessage(tr("Android reported no system packages available for reinstallation for user 0. Packages erased from firmware cannot be recovered using install-existing.",
+                    "O Android não encontrou pacotes de fábrica disponíveis para reinstalação no usuário 0. Pacotes apagados do firmware não podem ser recuperados com install-existing."))
+                .setPositiveButton("OK", null).show()
+            return
+        }
+        val checked = BooleanArray(candidates.size) { true }
+        val names = candidates.map { id ->
+            val title = AppGuide.name(id, lang == "pt", id)
+            if (title == id) id else "$title\n$id"
+        }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(tr("Recover system apps (${candidates.size})", "Recuperar apps de fábrica (${candidates.size})"))
+            .setMessage(tr("Detected directly from Android. All are selected; uncheck anything you do not want to reinstall. Restoring may re-enable features or change system behavior. A restart may be needed.",
+                "Detectados diretamente pelo Android. Todos estão selecionados; desmarque o que não quiser reinstalar. A restauração pode reativar recursos ou alterar o funcionamento do sistema. Talvez seja necessário reiniciar."))
+            .setMultiChoiceItems(names, checked) { _, which, enabled -> checked[which] = enabled }
             .setNegativeButton(tr("Cancel", "Cancelar"), null)
-            .setPositiveButton(tr("Restore", "Restaurar")) { _, _ -> restore(targets) }.show()
+            .setPositiveButton(tr("Restore selected", "Restaurar selecionados")) { _, _ ->
+                val targets = candidates.filterIndexed { index, _ -> checked[index] }
+                if (targets.isNotEmpty()) restore(targets)
+            }.show()
     }
 
     private fun restore(targets: List<String>) {
