@@ -50,6 +50,7 @@ class DashboardActivity : Activity() {
     private var statusText = ""
     private var systemApps = emptySet<String>()
     private var userApps = emptySet<String>()
+    private var removedApps = emptySet<String>()
     private var disabled = emptySet<String>()
     private var labels = emptyMap<String, String>()
     private var ram = emptyMap<String, Long>()
@@ -57,6 +58,7 @@ class DashboardActivity : Activity() {
     private var sizeRequested = false
     private var adapter: AppsAdapter? = null
     private var uninstallButton: Button? = null
+    private var restoreButton: Button? = null
     private var appList: ListView? = null
     private var statusLabel: TextView? = null
     private var guideList: ListView? = null
@@ -103,7 +105,7 @@ class DashboardActivity : Activity() {
                         .setPositiveButton(tr("Set up", "Configurar")) { _, _ -> openGuidedSetup() }
                         .show()
                 }
-            } else askAutoConnect()
+            }
         }
     }
 
@@ -132,6 +134,7 @@ class DashboardActivity : Activity() {
             userApps = items.installed
             disabled = items.disabled
             labels = items.names
+            removedApps = emptySet()
             selected.retainAll(items.system + items.installed)
             updateList()
             updateGuide()
@@ -167,6 +170,7 @@ class DashboardActivity : Activity() {
         adapter = null
         appList = null
         uninstallButton = null
+        restoreButton = null
         guideList = null
         guideSelectionLabel = null
         reviewButton = null
@@ -247,7 +251,7 @@ class DashboardActivity : Activity() {
         content.addView(search)
 
         val filters = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val categoryPicker = picker(AppGuide.categoryNames(lang == "pt"), category) {
+        val categoryPicker = picker(AppGuide.categoryNames(lang == "pt") + tr("Removed", "Removidos"), category) {
             category = it; updateList()
         }
         filters.addView(categoryPicker, LinearLayout.LayoutParams(0, 44.dp(), 2f))
@@ -286,6 +290,11 @@ class DashboardActivity : Activity() {
         action.setTextColor(Color.WHITE)
         uninstallButton = action
         root.addView(action, LinearLayout.LayoutParams(-1, 45.dp()))
+        val recovery = button(tr("Reinstall", "Reinstalar")) { confirmSelectedRestore() }
+        recovery.backgroundTintList = ColorStateList.valueOf(accent)
+        recovery.setTextColor(Color.WHITE)
+        restoreButton = recovery
+        root.addView(recovery, LinearLayout.LayoutParams(-1, 45.dp()))
     }
 
     private fun picker(values: Array<String>, initial: Int, onSelect: (Int) -> Unit): Spinner =
@@ -402,7 +411,7 @@ class DashboardActivity : Activity() {
             } else {
                 val saved = prefs.getString("connection_port", "")?.toIntOrNull()
                 if (saved != null && saved in 1..65535) scan(saved)
-                else autoConnect()
+                else toast(tr("Enter the connection port in the pairing notification first.", "Informe a porta de conexão na notificação de pareamento."))
             }
         }
         connect.textSize = 19f
@@ -411,15 +420,7 @@ class DashboardActivity : Activity() {
         connect.setTextColor(Color.WHITE)
         connect.isEnabled = readyToConnect() && !busy
         content.addView(connect)
-        content.addView(button(tr("Find connection automatically", "Buscar conexão automaticamente")) {
-            autoConnect()
-        }.apply {
-            visibility = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) View.VISIBLE else View.GONE
-        })
-        content.addView(label(tr("Recovery", "Restauração"), 17f, true))
-        content.addView(button(tr("Scan and reinstall removed system apps", "Buscar e reinstalar apps de fábrica")) {
-            confirmRestore()
-        })
+
     }
 
     private fun showSettings(content: LinearLayout) {
@@ -450,66 +451,6 @@ class DashboardActivity : Activity() {
         buildUi()
     }
 
-    private fun askAutoConnect() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
-        AlertDialog.Builder(this)
-            .setTitle(tr("Connect automatically?", "Conectar automaticamente?"))
-            .setMessage(tr("Finds the ADB port and reconnects with your saved pairing.",
-                "Encontra a porta ADB e reconecta com o pareamento salvo."))
-            .setNegativeButton(tr("Not now", "Agora não"), null)
-            .setPositiveButton(tr("Yes", "Sim")) { _, _ -> autoConnect() }
-            .show()
-    }
-
-    private fun autoConnect() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-            openGuidedSetup()
-            return
-        }
-        if (busy) return
-        busy = true
-        statusText = tr("Looking for wireless ADB…", "Procurando ADB sem fio…")
-        updateActions()
-        val finder = AdbDiscovery(this)
-        discovery = finder
-        finder.discover { found ->
-            if (isFinishing || isDestroyed) return@discover
-            discovery = null
-            busy = false
-            updateActions()
-            if (found == null) {
-                val saved = prefs.getString("connection_port", "")?.toIntOrNull()
-                if (saved != null && saved in 1..65535) {
-                    scan(saved, automatic = true)
-                } else {
-                    showSetupDialog(tr(
-                        "Turn on Wireless debugging in Developer options. Pair once if needed.",
-                        "Ative Depuração sem fio nas Opções do desenvolvedor. Pareie uma vez, se necessário."))
-                }
-            } else {
-                prefs.edit().putString("connection_port", found.toString()).apply()
-                scan(found, automatic = true)
-            }
-        }
-    }
-
-    private fun showSetupDialog(message: String) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-            openGuidedSetup()
-            return
-        }
-        AlertDialog.Builder(this)
-            .setTitle(tr("Wireless debugging", "Depuração sem fio"))
-            .setMessage(message)
-            .setNegativeButton(tr("Later", "Depois"), null)
-            .setPositiveButton(tr("Open settings", "Abrir configurações")) { _, _ ->
-                try {
-                    PairingReceiver.prepare(this)
-                    startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
-                } catch (e: Exception) { toast(e.message ?: tr("Settings unavailable", "Configurações indisponíveis")) }
-            }.show()
-    }
-
     private fun deviceStatus(): String = when {
         busy -> statusText.ifBlank { tr("Working…", "Processando…") }
         systemApps.isNotEmpty() || userApps.isNotEmpty() ->
@@ -521,8 +462,13 @@ class DashboardActivity : Activity() {
 
     private fun updateActions() {
         uninstallButton?.apply {
-            text = tr("Uninstall", "Desinstalar") + " (${selected.size})"
-            isEnabled = !busy && selected.isNotEmpty()
+            text = tr("Uninstall", "Desinstalar") + " (${selected.count { it !in removedApps }})"
+            isEnabled = !busy && selected.any { it !in removedApps }
+        }
+        restoreButton?.apply {
+            val count = selected.count { it in removedApps }
+            text = tr("Reinstall", "Reinstalar") + " ($count)"
+            isEnabled = connected && !busy && count > 0
         }
         guideSelectionLabel?.text = tr("Selected", "Selecionados") + ": ${selected.size}"
         reviewButton?.isEnabled = selected.isNotEmpty()
@@ -530,10 +476,11 @@ class DashboardActivity : Activity() {
     }
 
     private fun updateList() {
-        val all = systemApps + userApps
+        val all = systemApps + userApps + removedApps
         val term = query.trim().lowercase(Locale.ROOT)
         val matches = all.filter { name ->
-            AppGuide.matches(category, name, name in systemApps) &&
+            (if (category == AppGuide.categoryNames(lang == "pt").size) name in removedApps
+                else AppGuide.matches(category, name, name in systemApps || name in removedApps)) &&
                 (riskFilter == 0 || AppGuide.level(name) == riskFilter - 1) &&
                 (term.isEmpty() || name.lowercase(Locale.ROOT).contains(term) ||
                     AppGuide.name(name, lang == "pt", labels[name] ?: name)
@@ -564,7 +511,8 @@ class DashboardActivity : Activity() {
                 setPadding(9.dp(), 5.dp(), 8.dp(), 5.dp())
                 minHeight = 58.dp()
             }
-            val kind = if (id in systemApps) tr("system", "sistema") else tr("installed", "instalado")
+            val isRemoved = id in removedApps
+            val kind = when { isRemoved -> tr("REMOVED", "REMOVIDO"); id in systemApps -> tr("system", "sistema"); else -> tr("installed", "instalado") }
             val size = PackageMetrics.bytesLabel(sizes[id])
             val memory = PackageMetrics.ramLabel(ram[id])
             val risk = AppGuide.level(id)
@@ -574,6 +522,7 @@ class DashboardActivity : Activity() {
             checkbox.text = "${AppGuide.name(id, lang == "pt", labels[id] ?: id)}  $flag\n" +
                 "$group · $kind · $size · RAM $memory\n$id"
             checkbox.isChecked = id in selected
+            checkbox.alpha = if (isRemoved) 0.58f else 1f
             checkbox.setOnLongClickListener {
                 AlertDialog.Builder(this@DashboardActivity)
                     .setTitle(AppGuide.name(id, lang == "pt", labels[id] ?: id))
@@ -654,6 +603,7 @@ class DashboardActivity : Activity() {
             val currentRam = try {
                 PackageMetrics.ramPssKb(AdbCore.command(this, connection, "dumpsys meminfo"), systems + users)
             } catch (_: Exception) { emptyMap() }
+            val missing = missingSystemPackages(connection, systems)
             runOnUiThread {
                 model = currentModel
                 connected = true
@@ -664,7 +614,8 @@ class DashboardActivity : Activity() {
                 ram = currentRam
                 sizes = emptyMap()
                 sizeRequested = false
-                selected.retainAll(systems + users)
+                removedApps = missing
+                selected.retainAll(systems + users + removedApps)
                 tab = Tab.APPS
                 buildUi()
             }
@@ -788,7 +739,9 @@ class DashboardActivity : Activity() {
             }
             val systems = parsePackages(AdbCore.command(this, p, "pm list packages -s --user 0"))
             val users = parsePackages(AdbCore.command(this, p, "pm list packages -3 --user 0"))
+            val missing = missingSystemPackages(p, systems)
             runOnUiThread {
+                removedApps = missing
                 systemApps = systems
                 userApps = users
                 buildUi()
@@ -796,51 +749,21 @@ class DashboardActivity : Activity() {
         }
     }
 
-    private fun confirmRestore() {
-        if (!connected) {
-            AlertDialog.Builder(this)
-                .setTitle(tr("ADB connection required", "Conexão ADB necessária"))
-                .setMessage(tr("Connect to ADB first. Recovery scans Android itself, even if the app's removal history is empty.",
-                    "Conecte ao ADB primeiro. A recuperação consulta o próprio Android, mesmo sem histórico de remoção."))
-                .setPositiveButton(tr("Connect", "Conectar")) { _, _ -> openConnectTab() }
-                .setNegativeButton(tr("Cancel", "Cancelar"), null).show()
-            return
-        }
-        task(tr("Scanning removed system packages…", "Buscando pacotes de fábrica removidos…")) { p ->
-            // -u includes system packages not installed for user 0.
-            // Compare with currently installed packages; never rely solely on app preferences.
-            val available = parsePackages(AdbCore.command(this, p, "pm list packages -u -s --user 0"))
-            val installed = parsePackages(AdbCore.command(this, p, "pm list packages -s --user 0"))
-            val candidates = (available - installed).filter(::isValidId).sorted()
-            runOnUiThread { showRecoveryChoices(candidates) }
-        }
+    private fun missingSystemPackages(p: Int, installed: Set<String>): Set<String> {
+        val available = parsePackages(AdbCore.command(this, p, "pm list packages -u -s --user 0"))
+        return (available - installed).filter(::isValidId).toSet()
     }
 
-    private fun showRecoveryChoices(candidates: List<String>) {
-        if (isFinishing || isDestroyed) return
-        if (candidates.isEmpty()) {
-            AlertDialog.Builder(this)
-                .setTitle(tr("No removed system packages found", "Nenhum pacote de fábrica removido encontrado"))
-                .setMessage(tr("Android reported no system packages available for reinstallation for user 0. Packages erased from firmware cannot be recovered using install-existing.",
-                    "O Android não encontrou pacotes de fábrica disponíveis para reinstalação no usuário 0. Pacotes apagados do firmware não podem ser recuperados com install-existing."))
-                .setPositiveButton("OK", null).show()
-            return
-        }
-        val checked = BooleanArray(candidates.size) { true }
-        val names = candidates.map { id ->
-            val title = AppGuide.name(id, lang == "pt", id)
-            if (title == id) id else "$title\n$id"
-        }.toTypedArray()
+    private fun confirmSelectedRestore() {
+        val targets = selected.filter { it in removedApps }.filter(::isValidId)
+        if (!connected || busy || targets.isEmpty()) return
         AlertDialog.Builder(this)
-            .setTitle(tr("Recover system apps (${candidates.size})", "Recuperar apps de fábrica (${candidates.size})"))
-            .setMessage(tr("Detected directly from Android. All are selected; uncheck anything you do not want to reinstall. Restoring may re-enable features or change system behavior. A restart may be needed.",
-                "Detectados diretamente pelo Android. Todos estão selecionados; desmarque o que não quiser reinstalar. A restauração pode reativar recursos ou alterar o funcionamento do sistema. Talvez seja necessário reiniciar."))
-            .setMultiChoiceItems(names, checked) { _, which, enabled -> checked[which] = enabled }
+            .setTitle(tr("Reinstall ${targets.size} selected apps?", "Reinstalar ${targets.size} apps selecionados?"))
+            .setMessage(targets.joinToString("\n") + "\n\n" +
+                tr("Only the selected removed packages will be reinstalled.",
+                   "Somente os pacotes removidos selecionados serão reinstalados."))
             .setNegativeButton(tr("Cancel", "Cancelar"), null)
-            .setPositiveButton(tr("Restore selected", "Restaurar selecionados")) { _, _ ->
-                val targets = candidates.filterIndexed { index, _ -> checked[index] }
-                if (targets.isNotEmpty()) restore(targets)
-            }.show()
+            .setPositiveButton(tr("Reinstall", "Reinstalar")) { _, _ -> restore(targets) }.show()
     }
 
     private fun restore(targets: List<String>) {
@@ -866,7 +789,11 @@ class DashboardActivity : Activity() {
     private fun scanAfterRestore(p: Int) {
         val systems = parsePackages(AdbCore.command(this, p, "pm list packages -s --user 0"))
         val users = parsePackages(AdbCore.command(this, p, "pm list packages -3 --user 0"))
+        val missing = missingSystemPackages(p, systems)
         runOnUiThread {
+            removedApps = missing
+            selected.removeAll(removedApps.intersect(selected)) // selections are reset after recovery
+            selected.clear()
             systemApps = systems
             userApps = users
             buildUi()
