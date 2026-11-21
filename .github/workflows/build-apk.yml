@@ -1,4 +1,4 @@
-name: Build DebloaToast Expert v0.11
+name: Build DebloaToast Expert v0.12
 on:
   workflow_dispatch:
   push:
@@ -41,33 +41,33 @@ jobs:
       - name: Compile Expert APK
         run: gradle --no-daemon :app:assembleDebug
       - name: Prepare public APK filename
-        run: cp app/build/outputs/apk/debug/app-debug.apk DebloaToast-Expert-v0.11.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk DebloaToast-Expert-v0.12.apk
       - name: Upload current build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DebloaToast-Expert-v0.11-APK
-          path: DebloaToast-Expert-v0.11.apk
+          name: DebloaToast-Expert-v0.12-APK
+          path: DebloaToast-Expert-v0.12.apk
           if-no-files-found: error
       - name: Publish single stable GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          APK="DebloaToast-Expert-v0.11.apk"
+          APK="DebloaToast-Expert-v0.12.apk"
           COMPANION="desktop/DebloaToast-Windows.zip#DebloaToast-Windows.zip"
-          if gh release view v0.11 >/dev/null 2>&1; then
-            gh release upload v0.11 "$APK" "$COMPANION" --clobber
-            gh release edit v0.11 --title "DebloaToast Expert v0.11" --notes-file RELEASE_NOTES.md --latest
+          if gh release view v0.12 >/dev/null 2>&1; then
+            gh release upload v0.12 "$APK" "$COMPANION" --clobber
+            gh release edit v0.12 --title "DebloaToast Expert v0.12" --notes-file RELEASE_NOTES.md --latest
           else
-            gh release create v0.11 "$APK" "$COMPANION" --title "DebloaToast Expert v0.11" --notes-file RELEASE_NOTES.md --latest
+            gh release create v0.12 "$APK" "$COMPANION" --title "DebloaToast Expert v0.12" --notes-file RELEASE_NOTES.md --latest
           fi
       - name: Keep only the Expert public release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v0.11 >/dev/null 2>&1; then
-            gh release delete v0.10 --yes --cleanup-tag 2>/dev/null || true
+          if gh release view v0.12 >/dev/null 2>&1; then
+            gh release delete v0.11 --yes --cleanup-tag 2>/dev/null || true
           else
-            echo "v0.11 was not published; retaining prior release." >&2
+            echo "v0.12 was not published; retaining prior release." >&2
             exit 1
           fi
       - name: Update repository About description if permitted
@@ -75,7 +75,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh api --method PATCH "repos/$GITHUB_REPOSITORY" -f description='DebloaToast Expert v0.11 — Android 10+ debloater with guided ADB setup and critical system-app removal. Extreme risk; use at your own risk. Developer: Arthur Henrique Tostes Batista Aranha.' -f homepage='https://github.com/arthurhenriquetb/DebloaToast/releases/latest'; then
+          if gh api --method PATCH "repos/$GITHUB_REPOSITORY" -f description='DebloaToast Expert v0.12 — Android 10+ debloater with guided ADB setup and critical system-app removal. Extreme risk; use at your own risk. Developer: Arthur Henrique Tostes Batista Aranha.' -f homepage='https://github.com/arthurhenriquetb/DebloaToast/releases/latest'; then
             echo "Repository About description updated."
           else
             echo "GitHub Actions token cannot edit repository About settings. README and release notes were updated."
