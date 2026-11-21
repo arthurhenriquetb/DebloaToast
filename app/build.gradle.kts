@@ -17,8 +17,8 @@ android {
         applicationId = "br.com.a01optimizer.v08"
         minSdk = 29
         targetSdk = 32
-        versionCode = 15
-        versionName = "0.12.0-expert"
+        versionCode = 16
+        versionName = "0.12.1-expert"
     }
     packaging { resources { excludes.add("META-INF/LICENSE.md") } }
     compileOptions {
