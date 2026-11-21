@@ -33,9 +33,9 @@ Possible consequences include:
 
 A **single explicit warning** appears before executing the uninstall operation, especially when black-level packages are selected. The tool does not remove anything without the user's selection and confirmation. This is not a safety guarantee; the four levels are estimates and cannot account for every Android firmware.
 
-## Recovery in v0.12
+## Recovery in v0.12 (revised)
 
-Open **Connect → Scan and reinstall removed system apps** after establishing ADB. The tool compares `pm list packages -u -s --user 0` against installed system packages, presents the missing packages with checkboxes, and runs `cmd package install-existing --user 0` for selected packages. It cannot restore packages absent from the firmware or repair a phone without working ADB. A restart may be necessary.
+Connect to ADB, then open **Apps**. System packages removed for Android user 0 remain in the list, appear dimmed and marked **REMOVED**, and are available under the **Removed** category. Select only the packages you want and tap **Reinstall**. No packages are selected by default. The previous recovery dialog has been removed. Automatic ADB discovery prompts and the automatic connection button have been removed; pairing is initiated manually.
 
 ## Main features
 
