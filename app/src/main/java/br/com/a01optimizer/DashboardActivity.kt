@@ -451,6 +451,20 @@ class DashboardActivity : Activity() {
         buildUi()
     }
 
+    private fun showSetupDialog(message: String) {
+        AlertDialog.Builder(this)
+            .setTitle(tr("Wireless debugging", "Depuração sem fio"))
+            .setMessage(message)
+            .setNegativeButton(tr("Cancel", "Cancelar"), null)
+            .setPositiveButton(tr("Open settings", "Abrir configurações")) { _, _ ->
+                try {
+                    startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
+                } catch (_: Exception) {
+                    toast(tr("Settings unavailable", "Configurações indisponíveis"))
+                }
+            }.show()
+    }
+
     private fun deviceStatus(): String = when {
         busy -> statusText.ifBlank { tr("Working…", "Processando…") }
         systemApps.isNotEmpty() || userApps.isNotEmpty() ->
