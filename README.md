@@ -1,11 +1,11 @@
-# DebloaToast Expert v0.11
+# DebloaToast Expert v0.12
 
 **Android debloating with guided ADB setup — including advanced removal of critical system packages.**
 
 **Developer:** Arthur Henrique Tostes Batista Aranha  
 **Development disclosure:** The application concept, feature decisions and testing were directed by the developer. Application code was produced with assistance from ChatGPT (AI-generated / AI-assisted). The project has not been independently security-audited.
 
-**Download:** [DebloaToast Expert v0.11 for Android](../../releases/latest) · [Windows setup helper](../../releases/latest)
+**Download:** [DebloaToast Expert v0.12 for Android](../../releases/latest) · [Windows setup helper](../../releases/latest)
 
 DebloaToast runs on **Android 10 or later**. It displays packages actually present on the device instead of depending on a fixed list for one phone model. Manufacturer compatibility and risk classifications vary with the Android version and firmware.
 
@@ -33,6 +33,10 @@ Possible consequences include:
 
 A **single explicit warning** appears before executing the uninstall operation, especially when black-level packages are selected. The tool does not remove anything without the user's selection and confirmation. This is not a safety guarantee; the four levels are estimates and cannot account for every Android firmware.
 
+## Recovery in v0.12
+
+Open **Connect → Scan and reinstall removed system apps** after establishing ADB. The tool compares `pm list packages -u -s --user 0` against installed system packages, presents the missing packages with checkboxes, and runs `cmd package install-existing --user 0` for selected packages. It cannot restore packages absent from the firmware or repair a phone without working ADB. A restart may be necessary.
+
 ## Main features
 
 - View installed and preinstalled packages from the actual phone, not a device-specific preset.
@@ -41,7 +45,7 @@ A **single explicit warning** appears before executing the uninstall operation, 
 - Sort by name, estimated app size or measured RAM where available.
 - Uninstall ordinary applications with Android's confirmation.
 - With authorized ADB, attempt uninstall of selected factory and critical packages for Android user 0, without root.
-- Keep a restoration history for system packages removed by the app, where restoration remains possible.
+- Scan Android for system packages uninstalled for user 0, even if the app history is empty; selectively reinstall available packages using ADB.
 - English interface and optional Brazilian Portuguese translation.
 
 ## Guided connection — no separate ADB installation
@@ -52,13 +56,13 @@ A **single explicit warning** appears before executing the uninstall operation, 
 
 **Android 11+:** Use Android's built-in wireless debugging pairing code. DebloaToast can discover the current connection port and reuse saved pairing authorization. No computer is generally required on devices supporting Android's wireless debugging.
 
-**More intuitive connection flow (v0.11, updated build):** After replying to the pairing notification with Android's six-digit pairing code, DebloaToast automatically shows a **second notification** asking for the **connection port** displayed under **Developer options → Wireless debugging → IP address & Port** (not the temporary pairing port). Reply to the second notification with the number after the colon, for example `37123` from `192.168.1.5:37123`. DebloaToast then tests the connection. Alternatively, the connection-port field is **always visible** in the app's **Connect** tab, with an explanation and a shortcut to Developer options. Automatic port discovery is still available and may avoid typing this number altogether. Android controls whether inline notification replies are expanded; the app cannot guarantee an always-open keyboard in the notification.
+**More intuitive connection flow (v0.12, updated build):** After replying to the pairing notification with Android's six-digit pairing code, DebloaToast automatically shows a **second notification** asking for the **connection port** displayed under **Developer options → Wireless debugging → IP address & Port** (not the temporary pairing port). Reply to the second notification with the number after the colon, for example `37123` from `192.168.1.5:37123`. DebloaToast then tests the connection. Alternatively, the connection-port field is **always visible** in the app's **Connect** tab, with an explanation and a shortcut to Developer options. Automatic port discovery is still available and may avoid typing this number altogether. Android controls whether inline notification replies are expanded; the app cannot guarantee an always-open keyboard in the notification.
 
 An ordinary third-party app cannot bypass the initial Android debugging approval. Some Windows computers may require the manufacturer's USB driver. On Android 10, a restart can require running the helper again. Avoid using network ADB on public Wi-Fi; the legacy TCP port 5555 is exposed to the local network and should be disabled after use.
 
 ## Files and build
 
-- `DebloaToast-Expert-v0.11.apk` — public Android installer (debug-signed).
+- `DebloaToast-Expert-v0.12.apk` — public Android installer (debug-signed).
 - `DebloaToast-Windows.zip` — optional Windows companion for Android 10.
 - Minimum supported Android: 10 (API 29). Kotlin, Kadb and Gradle.
 - The application ID `br.com.a01optimizer.v08` remains unchanged to preserve compatibility with earlier installations using the same signing key.
