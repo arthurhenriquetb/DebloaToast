@@ -2,6 +2,8 @@ package br.com.a01optimizer
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -64,6 +66,7 @@ class DashboardActivity : Activity() {
     private var guideList: ListView? = null
     private var guideSelectionLabel: TextView? = null
     private var reviewButton: Button? = null
+    private var pendingExport: String? = null
     private var discovery: AdbDiscovery? = null
 
     private fun readyToConnect(): Boolean = connected ||
@@ -113,6 +116,16 @@ class DashboardActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == 410 && resultCode == RESULT_OK) scan(5555)
+        if (requestCode == 612 && resultCode == RESULT_OK && data?.data != null) {
+            val content = pendingExport
+            pendingExport = null
+            if (content != null) try {
+                contentResolver.openOutputStream(data.data!!)?.use { stream ->
+                    stream.write(content.toByteArray(Charsets.UTF_8))
+                } ?: error("Could not open document")
+                toast(tr("TXT saved", "TXT salvo"))
+            } catch (e: Exception) { toast(e.message ?: tr("Could not save TXT", "Não foi possível salvar TXT")) }
+        }
     }
 
     private fun openGuidedSetup() {
@@ -271,6 +284,12 @@ class DashboardActivity : Activity() {
             if (sort == 1) maybeLoadSizes()
         }
         controls.addView(sorter, LinearLayout.LayoutParams(0, 42.dp(), 1f))
+        controls.addView(button("▤") { exportList(guide = false) }.apply {
+            contentDescription = tr("Export list", "Exportar lista")
+            textSize = 19f
+            minWidth = 0
+            minimumWidth = 0
+        }, LinearLayout.LayoutParams(45.dp(), 42.dp()))
         controls.addView(button(tr("Refresh", "Atualizar")) { refresh() },
             LinearLayout.LayoutParams(-2, 42.dp()))
         content.addView(controls)
@@ -312,7 +331,13 @@ class DashboardActivity : Activity() {
         }
 
     private fun showGuide(content: LinearLayout) {
-        content.addView(label(tr("Suggestions", "Sugestões"), 18f, true))
+        val heading = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        heading.addView(label(tr("Suggestions", "Sugestões"), 18f, true), LinearLayout.LayoutParams(0, -2, 1f))
+        heading.addView(button("▤") { exportList(guide = true) }.apply {
+            contentDescription = tr("Export list", "Exportar lista")
+            textSize = 19f
+        })
+        content.addView(heading)
         content.addView(label(tr("Select several suggestions without leaving this tab. Black means a critical system component.",
             "Marque várias sugestões sem sair desta tela. Preto identifica um componente crítico do sistema."), 12f))
         guideSelectionLabel = label("", 13f, true)
@@ -550,6 +575,76 @@ class DashboardActivity : Activity() {
                 updateActions()
             }
             return checkbox
+        }
+    }
+
+    private fun exportList(guide: Boolean) {
+        val ids = if (guide) {
+            val list = guideList?.adapter
+            if (list == null) emptyList() else (0 until list.count)
+                .mapNotNull { list.getItem(it) as? String }.filter { it.isNotBlank() }
+        } else adapter?.items ?: emptyList()
+        if (ids.isEmpty()) {
+            toast(tr("The current list is empty", "A lista atual está vazia"))
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle(tr("Export current list (${ids.size})", "Exportar lista atual (${ids.size})"))
+            .setItems(arrayOf(
+                tr("Copy package IDs", "Copiar códigos dos pacotes"),
+                tr("Copy full details", "Copiar informações completas"),
+                tr("Save IDs as TXT", "Salvar códigos em TXT"),
+                tr("Save full details as TXT", "Salvar informações completas em TXT")
+            )) { _, choice ->
+                val details = choice == 1 || choice == 3
+                val content = exportText(ids, details)
+                if (choice <= 1) {
+                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("DebloaToast", content))
+                    toast(tr("List copied", "Lista copiada"))
+                } else {
+                    pendingExport = content
+                    val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TITLE, "DebloaToast-" +
+                            (if (guide) "suggestions" else "apps") +
+                            (if (details) "-details" else "-packages") + ".txt")
+                    }
+                    try { startActivityForResult(intent, 612) }
+                    catch (e: Exception) {
+                        pendingExport = null
+                        toast(e.message ?: tr("Cannot open file picker", "Não foi possível abrir o seletor de arquivos"))
+                    }
+                }
+            }.show()
+    }
+
+    private fun exportText(ids: List<String>, details: Boolean): String {
+        if (!details) return ids.joinToString("\n", postfix = "\n")
+        val categories = AppGuide.categoryNames(lang == "pt")
+        return buildString {
+            appendLine("DebloaToast Expert v0.12")
+            appendLine(tr("Current filtered list", "Lista filtrada atual") + " (${ids.size})")
+            appendLine(tr("Risk levels are estimates, not safety guarantees.",
+                "Os níveis de risco são estimativas, não garantias de segurança."))
+            appendLine()
+            ids.forEach { id ->
+                val state = when {
+                    id in removedApps -> tr("REMOVED", "REMOVIDO")
+                    id in systemApps -> tr("System", "Sistema")
+                    else -> tr("Installed", "Instalado")
+                }
+                appendLine(tr("Name", "Nome") + ": " + AppGuide.name(id, lang == "pt", labels[id] ?: id))
+                appendLine(tr("Package", "Pacote") + ": " + id)
+                appendLine(tr("Status", "Estado") + ": " + state)
+                appendLine(tr("Category", "Categoria") + ": " + categories[AppGuide.category(id)])
+                appendLine(tr("Risk", "Risco") + ": " + AppGuide.levelName(AppGuide.level(id), lang == "pt"))
+                appendLine(tr("Description", "Descrição") + ": " + AppGuide.description(id, lang == "pt"))
+                appendLine(tr("Size", "Tamanho") + ": " + PackageMetrics.bytesLabel(sizes[id]))
+                appendLine("RAM: " + PackageMetrics.ramLabel(ram[id]))
+                appendLine()
+            }
         }
     }
 
