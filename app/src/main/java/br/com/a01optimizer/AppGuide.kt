@@ -299,6 +299,7 @@ object AppGuide {
     }
 
     fun level(id: String): Int = when {
+        id == "com.samsung.android.app.clockpack" -> 2 // Removing breaks Samsung lock-screen clock styles.
         adviseKeep(id) -> 3
         entries[id]?.risk == Risk.LOWER -> 0
         entries[id]?.risk == Risk.CONDITIONAL -> 1
